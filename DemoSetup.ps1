@@ -23,7 +23,7 @@ New-Item -ItemType Directory -Force -Path $DemoRoot | Out-Null
 # DEMO 1: AUTORUNS (Malicious Registry Key)
 # =============================================================================
 Write-Host "`n[1] Setting up Autoruns Demo (Persistence)..." -ForegroundColor Yellow
-$RegPath = "HKCU\Software\Microsoft\Windows\CurrentVersion\Run"
+$RegPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 $RegName = "EvilNotepad"
 $RegValue = "C:\Windows\System32\notepad.exe"
 
