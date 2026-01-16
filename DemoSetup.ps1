@@ -1,5 +1,5 @@
 # =============================================================================
-# FIXED SYSINTERNALS DEMO SETUP
+# FIXED SYSINTERNALS DEMO SETUP (Final Version)
 # Usage: Run as Administrator.
 # =============================================================================
 
@@ -18,77 +18,83 @@ if (Test-Path $DemoRoot) { Remove-Item $DemoRoot -Recurse -Force -ErrorAction Si
 New-Item -ItemType Directory -Force -Path $DemoRoot | Out-Null
 
 # =============================================================================
-# DEMO 1: AUTORUNS (FIXED)
+# DEMO 1: AUTORUNS (Persistence)
 # =============================================================================
-Write-Host "`n[1] Setting up Autoruns Demo (Persistence)..." -ForegroundColor Yellow
-
-# 1. Create a dummy "malicious" file so Autoruns sees it as UNSIGNED (Pink)
+Write-Host "`n[1] Setting up Autoruns..." -ForegroundColor Yellow
 $EvilFile = "$DemoRoot\BotnetLauncher.bat"
 "start calc.exe" | Out-File $EvilFile -Encoding ASCII
-
-# 2. Use HKLM (System-wide) so it appears for ANY user
-$RegPath = "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
+$RegPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
 $RegName = "BotnetLauncher"
 
-try {
-    Set-ItemProperty -Path $RegPath -Name $RegName -Value $EvilFile -Force
-    Write-Host "    [+] Created Malware File: $EvilFile" -ForegroundColor Green
-    Write-Host "    [+] Created HKLM Run Key: $RegName" -ForegroundColor Green
-} catch {
-    Write-Error "    [-] Failed to create registry key."
-}
+if (!(Test-Path $RegPath)) { New-Item -Path $RegPath -Force | Out-Null }
+Set-ItemProperty -Path $RegPath -Name $RegName -Value $EvilFile -Force
+Write-Host "    [+] Created HKLM Run Key: $RegName" -ForegroundColor Green
 
 # =============================================================================
-# DEMO 2: PROCESS EXPLORER
+# DEMO 2: PROCESS EXPLORER (File Lock)
 # =============================================================================
-Write-Host "`n[2] Setting up Process Explorer Demo..." -ForegroundColor Yellow
+Write-Host "`n[2] Setting up Process Explorer (Hard Lock)..." -ForegroundColor Yellow
 $LockFile = "$DemoRoot\SecretPlans.txt"
 "Top Secret Project Info" | Out-File $LockFile
 
-# Start Notepad minimized to lock the file
-Start-Process "notepad.exe" -ArgumentList $LockFile -WindowStyle Minimized
-Write-Host "    [+] Launched Notepad (Minimized) to lock '$LockFile'" -ForegroundColor Green
+# We use PowerShell to open a file stream with 'None' share mode.
+# This makes it IMPOSSIBLE to delete the file while this script is running.
+$LockScript = @"
+    `$f = [System.IO.File]::Open('$LockFile', 'Open', 'ReadWrite', 'None');
+    Start-Sleep -Seconds 3600;
+    `$f.Close();
+"@
+
+# Start this locker script in a hidden background window
+Start-Process "powershell.exe" -ArgumentList "-NoProfile", "-WindowStyle", "Hidden", "-Command", $LockScript
+Write-Host "    [+] Launched Hidden PowerShell process to HARD LOCK '$LockFile'" -ForegroundColor Green
 
 # =============================================================================
-# DEMO 3: PROCESS MONITOR
+# FIXED DEMO 3 SETUP (ProcMon)
 # =============================================================================
-Write-Host "`n[3] Setting up ProcMon Demo..." -ForegroundColor Yellow
+$DemoRoot = "C:\Demo_Workspace"
 $BatchFile = "$DemoRoot\BrokenScript.bat"
-# Script tries to read a file that doesn't exist
-"type $DemoRoot\MissingFile.txt" | Out-File $BatchFile -Encoding ASCII
-Write-Host "    [+] Created broken script: $BatchFile" -ForegroundColor Green
+
+# We add 'pause' so the window stays open, letting you see the error physically.
+$Content = @"
+@echo off
+echo Attempting to read critical file...
+type "$DemoRoot\MissingFile.txt"
+pause
+"@
+
+$Content | Out-File $BatchFile -Encoding ASCII
+Write-Host "[+] Updated BrokenScript.bat with a 'pause' command." -ForegroundColor Green
 
 # =============================================================================
-# DEMO 4: SYSMON
+# FIXED DEMO 4 SETUP (Sysmon)
 # =============================================================================
-Write-Host "`n[4] Setting up Sysmon..." -ForegroundColor Yellow
+$SysinternalsPath = "C:\Sysinternals"
 $SysmonExe = "$SysinternalsPath\sysmon64.exe"
 
-if (Test-Path $SysmonExe) {
-    if (Get-Service "Sysmon64" -ErrorAction SilentlyContinue) {
-        Write-Host "    [!] Sysmon already running." -ForegroundColor Cyan
-    } else {
-        Start-Process -FilePath $SysmonExe -ArgumentList "-i -n -accepteula" -Wait -WindowStyle Hidden
-        Write-Host "    [+] Sysmon Installed." -ForegroundColor Green
-    }
-    # Clear logs for a clean demo
-    wevtutil cl "Microsoft-Windows-Sysmon/Operational"
+Write-Host "[4] Setting up Sysmon..." -ForegroundColor Yellow
+
+# 1. Ensure Sysmon is installed
+if (Get-Service "Sysmon64" -ErrorAction SilentlyContinue) {
+    Write-Host "    [+] Sysmon is running." -ForegroundColor Green
 } else {
-    Write-Warning "    [-] Sysmon exe not found at $SysmonExe."
+    Write-Host "    [*] Installing Sysmon..."
+    Start-Process -FilePath $SysmonExe -ArgumentList "-i -n -accepteula" -Wait -WindowStyle Hidden
 }
 
+# 2. Clear the logs so your "Malware" command is the FIRST thing you see
+wevtutil cl "Microsoft-Windows-Sysmon/Operational"
+Write-Host "    [+] Sysmon logs cleared. Ready for demo." -ForegroundColor Green
 # =============================================================================
 # DEMO 5: ACCESSCHK
 # =============================================================================
 Write-Host "`n[5] Setting up AccessChk..." -ForegroundColor Yellow
 $DropBox = "$DemoRoot\PublicDropBox"
 New-Item -ItemType Directory -Force -Path $DropBox | Out-Null
-
-# Grant "Users" Full Control (The vulnerability)
 $Acl = Get-Acl $DropBox
 $Ar = New-Object System.Security.AccessControl.FileSystemAccessRule("Users", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
 $Acl.SetAccessRule($Ar)
 Set-Acl $DropBox $Acl
 Write-Host "    [+] Created vulnerable folder: $DropBox" -ForegroundColor Green
 
-Write-Host "`n[!] SETUP COMPLETE. YOU ARE READY TO PRESENT." -ForegroundColor Magenta
+Write-Host "`n[!] SETUP COMPLETE." -ForegroundColor Magenta
